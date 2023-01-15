@@ -13,11 +13,15 @@ from docutils.nodes import image, literal_block
 from docutils.parsers.rst import Directive, directives
 from pelican import signals, logger
 
-from .generateUmlDiagram import generate_uml_image
+from .generateUmlDiagram import plantuml_render_to_file, name_with_hash
 
 
-global_siteurl = "" # URL of the site, filled on plugin initialization
+global_settings = None
 
+def init_settings(settings):
+    global global_settings
+    global_settings = settings
+    pass
 
 class PlantUML_rst(Directive):
     """ reST directive for PlantUML """
@@ -31,19 +35,26 @@ class PlantUML_rst(Directive):
         'class' : directives.class_option,
         'alt'   : directives.unchanged,
         'format': directives.unchanged,
+        "output": directives.unchanged,
     }
 
     def run(self):
-        path = os.path.abspath(os.path.join('output', 'images'))
-        if not os.path.exists(path):
-            os.makedirs(path)
+        site_url = global_settings['SITEURL']
+        output_dir = global_settings['OUTPUT_PATH']
+        # print(f"output_dir={output_dir}")
+        image_dir = os.path.abspath(os.path.join(output_dir, 'images'))
+        if not os.path.exists(image_dir):
+            os.makedirs(image_dir)
 
         nodes = []
         body = '\n'.join(self.content)
 
         try:
             uml_format = self.options.get('format', 'png')
-            url = global_siteurl+'/images/'+generate_uml_image(path, body, uml_format)
+            fname = name_with_hash(body) + "." + uml_format
+            fpath = os.path.join(image_dir, fname) 
+            plantuml_render_to_file(body, uml_format, fpath)
+            url = site_url +'/images/' + fname
         except Exception as exc:
             error = self.state_machine.reporter.error(
                 'Failed to run plantuml: %s' % exc,
@@ -59,11 +70,8 @@ class PlantUML_rst(Directive):
         return nodes
 
 def pelican_init(pelicanobj):
-
-    global global_siteurl
-    global_siteurl = pelicanobj.settings['SITEURL']
-
     """ Prepare configurations for the MD plugin """
+    init_settings(pelicanobj.settings)
     try:
         import markdown
         from .plantuml_md import PlantUMLMarkdownExtension
